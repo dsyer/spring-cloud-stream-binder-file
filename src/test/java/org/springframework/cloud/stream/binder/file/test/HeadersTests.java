@@ -30,6 +30,7 @@ import org.springframework.cloud.stream.annotation.EnableBinding;
 import org.springframework.cloud.stream.annotation.StreamListener;
 import org.springframework.cloud.stream.binder.file.MessageController;
 import org.springframework.cloud.stream.messaging.Processor;
+import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.annotation.DirtiesContext;
@@ -43,10 +44,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest({ "spring.cloud.stream.binder.file.prefix=target/streams", "logging.level.root=INFO",
-		"logging.level.org.springframework.cloud.stream.binder.file=DEBUG", "logging.level.org.springframework.integration=DEBUG" })
+@SpringBootTest({ "spring.cloud.stream.binder.file.prefix=target/streams",
+		"logging.level.root=INFO",
+		"logging.level.org.springframework.cloud.stream.binder.file=DEBUG",
+		"logging.level.org.springframework.integration=DEBUG" })
 @DirtiesContext
-public class ProcessorMessageChannelBinderTests {
+public class HeadersTests {
 
 	@Autowired
 	private Processor processor;
@@ -61,30 +64,20 @@ public class ProcessorMessageChannelBinderTests {
 
 	@Test
 	public void supplier() throws Exception {
-		processor.output().send(MessageBuilder.withPayload("hello").build());
-		String message = (String) controller.receive("output", 100, TimeUnit.MILLISECONDS)
-				.getPayload();
-		assertThat(message).contains("hello");
+		processor.output().send(
+				MessageBuilder.withPayload("hello").setHeader("foo", "bar").build());
+		Message<?> message = controller.receive("output", 100, TimeUnit.MILLISECONDS);
+		assertThat((String) message.getPayload()).contains("hello");
+		assertThat(message.getHeaders()).containsEntry("foo", "bar");
 	}
 
 	@Test
 	public void function() throws Exception {
-		controller.send("input", MessageBuilder.withPayload("hello").build());
-		String message = (String) controller.receive("output", 100, TimeUnit.MILLISECONDS)
-				.getPayload();
-		assertThat(message).contains("HELLO");
-	}
-
-	@Test
-	public void multi() throws Exception {
-		controller.send("input", MessageBuilder.withPayload("hello").build());
-		controller.send("input", MessageBuilder.withPayload("world").build());
-		String message = (String) controller.receive("output", 100, TimeUnit.MILLISECONDS)
-				.getPayload();
-		assertThat(message).startsWith("HELLO");
-		message = (String) controller.receive("output", 2000, TimeUnit.MILLISECONDS)
-				.getPayload();
-		assertThat(message).startsWith("WORLD");
+		controller.send("input",
+				MessageBuilder.withPayload("hello").setHeader("foo", "bar").build());
+		Message<?> message = controller.receive("output", 100, TimeUnit.MILLISECONDS);
+		assertThat((String) message.getPayload()).contains("HELLO");
+		assertThat(message.getHeaders()).containsEntry("foo", "bar");
 	}
 
 	@SpringBootApplication
@@ -92,13 +85,13 @@ public class ProcessorMessageChannelBinderTests {
 	protected static class TestConfiguration {
 		@StreamListener(Processor.INPUT)
 		@SendTo(Processor.OUTPUT)
-		public String uppercase(String input) {
-			return input.toUpperCase();
+		public Message<String> uppercase(Message<String> input) {
+			return MessageBuilder.withPayload(input.getPayload().toUpperCase())
+					.copyHeaders(input.getHeaders()).build();
 		}
 
 		public static void main(String[] args) throws Exception {
-			SpringApplication.run(
-					ProcessorMessageChannelBinderTests.TestConfiguration.class,
+			SpringApplication.run(HeadersTests.TestConfiguration.class,
 					"--logging.level.root=INFO");
 		}
 

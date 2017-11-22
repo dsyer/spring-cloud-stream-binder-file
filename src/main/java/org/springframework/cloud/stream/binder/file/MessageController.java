@@ -25,7 +25,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
@@ -37,6 +39,7 @@ import org.apache.commons.logging.LogFactory;
 
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.SubscribableChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.util.StreamUtils;
@@ -155,13 +158,33 @@ public class MessageController implements Closeable {
 					Thread.currentThread().interrupt();
 				}
 				if (message != null) {
-					String value = message.getPayload().toString();
-					logger.debug("Sending to " + file + ": " + value);
-					if (!value.endsWith("\n")) {
-						value = value + "\n";
+					StringBuilder sb = new StringBuilder();
+					if (!message.getHeaders().isEmpty()) {
+						StringBuilder hb = new StringBuilder();
+						for (Entry<String, Object> entry : message.getHeaders().entrySet()) {
+							if (!"id".equals(entry.getKey())
+									&& !"timestamp".equals(entry.getKey())
+									&& entry.getValue() instanceof String) {
+								if (hb.length() == 0) {
+									hb.append("#headers:\n");
+								}
+								hb.append(entry.getKey()).append("=")
+										.append(entry.getValue()).append("\n");
+							}
+						}
+						if (hb.length() > 0) {
+							hb.append("\n");
+							sb.append(hb);
+						}
+					}
+					sb.append(message.getPayload().toString());
+					logger.debug("Sending to " + file + ": " + sb);
+					if (sb.charAt(sb.length() - 1) != '\n') {
+						sb.append("\n");
 					}
 					try (FileOutputStream stream = new FileOutputStream(file, true)) {
-						StreamUtils.copy(value + "\n\n", StandardCharsets.UTF_8, stream);
+						StreamUtils.copy(sb + "\n\n", StandardCharsets.UTF_8, stream);
+						stream.flush();
 					}
 				}
 			}
@@ -173,10 +196,27 @@ public class MessageController implements Closeable {
 			br = new BufferedReader(new InputStreamReader(inputStream));
 			logger.debug("Receiving from " + file);
 			while (running.get()) {
+				String line = br.readLine();
+				MessageHeaders headers = null;
+				if (line != null && line.equals("#headers:")) {
+					Map<String, Object> map = new LinkedHashMap<>();
+					while (running.get() && line != null) {
+						logger.debug("Header line from " + file + ": " + line);
+						if (line.length() == 0) {
+							line = br.readLine();
+							break;
+						}
+						int index = line.indexOf("=");
+						String key = index >= 0 ? line.substring(0, index) : line;
+						String value = index >= 0 ? line.substring(index + 1) : null;
+						map.put(key, value);
+						line = br.readLine();
+					}
+					headers = map.isEmpty() ? null : new MessageHeaders(map);
+				}
 				StringBuilder sb = new StringBuilder();
-				String line = null;
 				int count = 0;
-				while (running.get() && count < 2 && (line = br.readLine()) != null) {
+				while (running.get() && count < 2 && line != null) {
 					logger.debug("Line from " + file + ": " + line);
 					if (line.length() == 0) {
 						count++;
@@ -187,13 +227,23 @@ public class MessageController implements Closeable {
 					if (count == 0) {
 						sb.append(line + System.getProperty("line.separator"));
 					}
+					if (count<2) {
+						// If we finished reading a message don't go onto the next line
+						line = br.readLine();
+					}
 				}
-				if (line != null && count > 1) {
-					if (line.length() > 0) {
+				if (count > 1 || !running.get()) {
+					if (line != null && line.length() > 0) {
+						// Partial message received
 						sb.append(line + System.getProperty("line.separator"));
 					}
-					Message<String> message = MessageBuilder.withPayload(sb.toString())
-							.build();
+					MessageBuilder<String> builder = MessageBuilder
+							.withPayload(sb.toString());
+					if (headers != null) {
+						builder.copyHeadersIfAbsent(headers);
+					}
+					Message<String> message = builder.build();
+					logger.debug("Assembed from " + file + ": " + message);
 					if (this.target != null) {
 						target.send(message);
 					}
@@ -210,5 +260,6 @@ public class MessageController implements Closeable {
 			}
 			br.close();
 		}
+
 	}
 }
