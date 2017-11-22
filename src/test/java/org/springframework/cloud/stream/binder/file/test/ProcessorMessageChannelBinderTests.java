@@ -18,6 +18,7 @@ package org.springframework.cloud.stream.binder.file.test;
 import java.io.File;
 import java.util.concurrent.TimeUnit;
 
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,10 +30,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.stream.annotation.EnableBinding;
 import org.springframework.cloud.stream.annotation.StreamListener;
 import org.springframework.cloud.stream.binder.file.MessageController;
+import org.springframework.cloud.stream.binder.file.test.ProcessorMessageChannelBinderTests.TestConfiguration;
 import org.springframework.cloud.stream.messaging.Processor;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.FileSystemUtils;
 
@@ -43,21 +46,44 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest({ "spring.cloud.stream.binder.file.prefix=target/streams", "logging.level.root=INFO",
-		"logging.level.org.springframework.cloud.stream.binder.file=DEBUG", "logging.level.org.springframework.integration=DEBUG" })
+@SpringBootTest(classes = TestConfiguration.class, properties = {
+		"logging.level.root=INFO",
+		"logging.level.org.springframework.cloud.stream.binder.file=DEBUG",
+		"logging.level.org.springframework.integration=DEBUG" })
 @DirtiesContext
-public class ProcessorMessageChannelBinderTests {
+public abstract class ProcessorMessageChannelBinderTests {
+
+	@TestPropertySource(properties = "spring.cloud.stream.binder.file.prefix=target/streams")
+	public static class FileProcessorMessageChannelBinderTests
+			extends ProcessorMessageChannelBinderTests {
+
+		@BeforeClass
+		public static void init() throws Exception {
+			FileSystemUtils.deleteRecursively(new File("target/streams"));
+		}
+
+	}
+
+	public static class PipeProcessorMessageChannelBinderTests
+			extends ProcessorMessageChannelBinderTests {
+
+		@BeforeClass
+		public static void init() throws Exception {
+			File input = new File("target/stream/input");
+			File output = new File("target/stream/output");
+			Assume.assumeTrue(
+					"Skipping tests because files do not exist. To run this test create named pipes at "
+							+ input + " and " + output,
+					input.exists() && output.exists());
+		}
+
+	}
 
 	@Autowired
 	private Processor processor;
 
 	@Autowired
 	private MessageController controller;
-
-	@BeforeClass
-	public static void init() throws Exception {
-		FileSystemUtils.deleteRecursively(new File("target/streams"));
-	}
 
 	@Test
 	public void supplier() throws Exception {

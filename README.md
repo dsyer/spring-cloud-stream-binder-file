@@ -9,3 +9,19 @@ Configuration properties (in addition to the ones provided by Spring Cloud Strea
 | Key                            | Default | Description                |
 |--------------------------------|---------|----------------------------|
 | `spring.cloud.stream.binder.file.prefix`         | `target/stream` | The prefix for the file paths |
+
+## Building
+
+```
+$ ./mvnw clean install
+```
+
+The tests run with regular files by default in `target/streams/{input,output}`, deleting them before each test class (so you can inspect the contents after running a test).
+
+There is one test that will only run if some named pipes already exist, so optionally and for a more thorough test do this as well (note the different file location to the other tests):
+
+```
+$ mkfifo target/stream/input
+$ mkfifo target/stream/output
+$ ./mvnw clean install
+```
