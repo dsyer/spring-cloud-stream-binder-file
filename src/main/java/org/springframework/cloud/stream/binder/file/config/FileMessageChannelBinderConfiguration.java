@@ -37,7 +37,7 @@ public class FileMessageChannelBinderConfiguration {
 	private Codec codec;
 
 	@Bean
-	public FileMessageChannelBinder servletMessageChannelBinder(
+	public FileMessageChannelBinder fileMessageChannelBinder(
 			MessageController controller) {
 
 		FileMessageChannelBinder messageChannelBinder = new FileMessageChannelBinder(

@@ -16,8 +16,6 @@
 
 package org.springframework.cloud.stream.binder.file.config;
 
-import org.springframework.boot.autoconfigure.AutoConfigureBefore;
-import org.springframework.boot.autoconfigure.web.WebMvcAutoConfiguration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.cloud.stream.binder.file.MessageController;
 import org.springframework.context.annotation.Bean;
@@ -27,7 +25,6 @@ import org.springframework.context.annotation.Configuration;
  * @author Dave Syer
  */
 @Configuration
-@AutoConfigureBefore({ WebMvcAutoConfiguration.class })
 @ConfigurationProperties("spring.cloud.stream.binder.file")
 public class MessageHandlingAutoConfiguration {
 
