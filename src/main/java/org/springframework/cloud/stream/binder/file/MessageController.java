@@ -70,19 +70,14 @@ public class MessageController implements Closeable {
 
 	public void bind(String name, String group, MessageChannel inputTarget) {
 		running.set(true);
-		if (!queues.containsKey(name)) {
-			queues.put(name, new FileAdapter(name, inputTarget));
-		}
-		queues.get(name).target = inputTarget;
+		queues.computeIfAbsent(name, key -> new FileAdapter(key)).target = inputTarget;
 	}
 
 	public Message<?> receive(String name, long timeout, TimeUnit unit) {
 		running.set(true);
-		if (!queues.containsKey(name)) {
-			queues.put(name, new FileAdapter(name));
-		}
 		try {
-			return queues.get(name).input.poll(timeout, unit);
+			return queues.computeIfAbsent(name, key -> new FileAdapter(key)).input
+					.poll(timeout, unit);
 		}
 		catch (InterruptedException e) {
 			running.set(false);
@@ -99,11 +94,8 @@ public class MessageController implements Closeable {
 
 	public void send(String name, Message<?> message) {
 		running.set(true);
-		if (!queues.containsKey(name)) {
-			queues.put(name, new FileAdapter(name));
-		}
 		try {
-			queues.get(name).output.put(message);
+			queues.computeIfAbsent(name, key -> new FileAdapter(key)).output.put(message);
 		}
 		catch (InterruptedException e) {
 			running.set(false);
@@ -124,6 +116,15 @@ public class MessageController implements Closeable {
 		public FileAdapter(String name, MessageChannel target) {
 			this.target = target;
 			this.file = new File(prefix + "/" + name);
+			if (!this.file.exists()) {
+				logger.debug("Creating: " + file);
+				try {
+					this.file.createNewFile();
+				}
+				catch (IOException e) {
+					logger.error("Cannot create new file", e);
+				}
+			}
 			logger.debug("Starting background processing for: " + file);
 			executor.submit(() -> {
 				try {

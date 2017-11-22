@@ -25,7 +25,7 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.SubscribableChannel;
 
 /**
- * A {@link org.springframework.cloud.stream.binder.Binder} implementation backed by HTTP.
+ * A {@link org.springframework.cloud.stream.binder.Binder} implementation backed by file I/O.
  *
  * @author Dave Syer
  */

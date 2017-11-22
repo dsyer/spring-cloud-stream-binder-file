@@ -15,9 +15,10 @@
  */
 package org.springframework.cloud.stream.binder.file.test;
 
+import java.io.File;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -29,12 +30,11 @@ import org.springframework.cloud.stream.annotation.EnableBinding;
 import org.springframework.cloud.stream.annotation.StreamListener;
 import org.springframework.cloud.stream.binder.file.MessageController;
 import org.springframework.cloud.stream.messaging.Processor;
-import org.springframework.integration.channel.DirectChannel;
-import org.springframework.integration.channel.QueueChannel;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.util.FileSystemUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,12 +43,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest({ "logging.level.root=INFO",
+@SpringBootTest({ "spring.cloud.stream.binder.file.prefix=target/streams", "logging.level.root=INFO",
 		"logging.level.org.springframework.cloud.stream.binder.file=DEBUG", "logging.level.org.springframework.integration=DEBUG" })
 @DirtiesContext
 public class ProcessorMessageChannelBinderTests {
-
-	private String prefix = "target/stream";
 
 	@Autowired
 	private Processor processor;
@@ -56,8 +54,9 @@ public class ProcessorMessageChannelBinderTests {
 	@Autowired
 	private MessageController controller;
 
-	@Before
-	public void init() throws Exception {
+	@BeforeClass
+	public static void init() throws Exception {
+		FileSystemUtils.deleteRecursively(new File("target/streams"));
 	}
 
 	@Test
