@@ -67,7 +67,7 @@ public class MessageControllerTests {
 		controller.subscribe("output", outbound);
 		outbound.send(MessageBuilder.withPayload("hello").build());
 		String result = getOutput("output");
-		assertThat(result).isEqualTo("hello\n\n\n");
+		assertThat(result).isEqualTo("hello\n");
 	}
 
 	@Test
@@ -80,16 +80,16 @@ public class MessageControllerTests {
 			result.set(message);
 			latch.countDown();
 		});
-		write("world\n\n\n", "input");
+		write("world\n", "input");
 		latch.await(1000L, TimeUnit.MILLISECONDS);
-		assertThat(result.get().getPayload()).isEqualTo("world\n");
+		assertThat(result.get().getPayload()).isEqualTo("world");
 	}
 
 	@Test
 	public void sendNoHeaders() throws Exception {
 		controller.send("output", MessageBuilder.withPayload("hello").build());
 		String result = getOutput("output");
-		assertThat(result).isEqualTo("hello\n\n\n");
+		assertThat(result).isEqualTo("hello\n");
 	}
 
 	@Test
@@ -97,7 +97,7 @@ public class MessageControllerTests {
 		controller.send("output", MessageBuilder.withPayload("hello").build());
 		controller.send("output", MessageBuilder.withPayload("world").build());
 		String result = getOutput("output", "world");
-		assertThat(result).isEqualTo("hello\n\n\nworld\n\n\n");
+		assertThat(result).isEqualTo("hello\nworld\n");
 	}
 
 	@Test
@@ -105,7 +105,7 @@ public class MessageControllerTests {
 		controller.send("output",
 				MessageBuilder.withPayload("world").setHeader("foo", "bar").build());
 		String result = getOutput("output");
-		assertThat(result).isEqualTo("#headers:\nfoo=bar\n\nworld\n\n\n");
+		assertThat(result).isEqualTo("#headers\nfoo=bar\n#payload\nworld\n#end\n");
 	}
 
 	@Test
@@ -115,21 +115,44 @@ public class MessageControllerTests {
 		controller.send("output",
 				MessageBuilder.withPayload("world").setHeader("foo", "baz").build());
 		String result = getOutput("output", "world");
-		assertThat(result).isEqualTo("#headers:\nfoo=bar\n\nhello\n\n\n#headers:\nfoo=baz\n\nworld\n\n\n");
+		assertThat(result).isEqualTo("#headers\nfoo=bar\n#payload\nhello\n#end\n#headers\nfoo=baz\n#payload\nworld\n#end\n");
 	}
 
 	@Test
 	public void receiveNoHeaders() throws Exception {
-		write("hello\n\n\n", "input");
+		write("hello\n", "input");
 		Message<?> result = controller.receive("input", 100L, TimeUnit.MILLISECONDS);
-		assertThat(result.getPayload()).isEqualTo("hello\n");
+		assertThat(result.getPayload()).isEqualTo("hello");
+	}
+
+	@Test
+	public void receiveExplicitPayloadNoHeaders() throws Exception {
+		write("#payload\nhello\n#end\n", "input");
+		Message<?> result = controller.receive("input", 100L, TimeUnit.MILLISECONDS);
+		assertThat(result.getPayload()).isEqualTo("hello");
+	}
+
+	@Test
+	public void receiveNoHeadersTwoMessages() throws Exception {
+		write("hello\nworld\n", "input");
+		controller.receive("input", 100L, TimeUnit.MILLISECONDS);
+		Message<?> result = controller.receive("input", 100L, TimeUnit.MILLISECONDS);
+		assertThat(result.getPayload()).isEqualTo("world");
 	}
 
 	@Test
 	public void receiveHeaders() throws Exception {
-		write("#headers:\nfoo=bar\n\nworld\n\n\n", "input");
+		write("#headers\nfoo=bar\n#payload\nworld\n#end\n", "input");
 		Message<?> result = controller.receive("input", 100L, TimeUnit.MILLISECONDS);
-		assertThat(result.getPayload()).isEqualTo("world\n");
+		assertThat(result.getPayload()).isEqualTo("world");
+		assertThat(result.getHeaders()).containsEntry("foo", "bar");
+	}
+
+	@Test
+	public void receiveHeadersEmptyPayload() throws Exception {
+		write("#headers\nfoo=bar\n#end\n", "input");
+		Message<?> result = controller.receive("input", 100L, TimeUnit.MILLISECONDS);
+		assertThat(result.getPayload()).isEqualTo("");
 		assertThat(result.getHeaders()).containsEntry("foo", "bar");
 	}
 

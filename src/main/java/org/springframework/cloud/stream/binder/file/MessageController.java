@@ -161,29 +161,35 @@ public class MessageController implements Closeable {
 					StringBuilder sb = new StringBuilder();
 					if (!message.getHeaders().isEmpty()) {
 						StringBuilder hb = new StringBuilder();
-						for (Entry<String, Object> entry : message.getHeaders().entrySet()) {
+						for (Entry<String, Object> entry : message.getHeaders()
+								.entrySet()) {
 							if (!"id".equals(entry.getKey())
 									&& !"timestamp".equals(entry.getKey())
 									&& entry.getValue() instanceof String) {
 								if (hb.length() == 0) {
-									hb.append("#headers:\n");
+									hb.append("#headers\n");
 								}
 								hb.append(entry.getKey()).append("=")
 										.append(entry.getValue()).append("\n");
 							}
 						}
 						if (hb.length() > 0) {
-							hb.append("\n");
 							sb.append(hb);
 						}
 					}
-					sb.append(message.getPayload().toString());
-					logger.debug("Sending to " + file + ": " + sb);
-					if (sb.charAt(sb.length() - 1) != '\n') {
-						sb.append("\n");
+					String value = message.getPayload().toString();
+					boolean needsEnd = false;
+					if (value.contains("\n") || sb.length()>0) {
+						sb.append("#payload\n");
+						needsEnd = true;
 					}
+					sb.append(value).append("\n");
+					if (needsEnd) {
+						sb.append("#end\n");
+					}
+					logger.debug("Sending to " + file + ": " + sb);
 					try (FileOutputStream stream = new FileOutputStream(file, true)) {
-						StreamUtils.copy(sb + "\n\n", StandardCharsets.UTF_8, stream);
+						StreamUtils.copy(sb.toString(), StandardCharsets.UTF_8, stream);
 						stream.flush();
 					}
 				}
@@ -198,45 +204,45 @@ public class MessageController implements Closeable {
 			while (running.get()) {
 				String line = br.readLine();
 				MessageHeaders headers = null;
-				if (line != null && line.equals("#headers:")) {
+				if (line != null && line.equals("#headers")) {
 					Map<String, Object> map = new LinkedHashMap<>();
 					while (running.get() && line != null) {
+						line = br.readLine();
 						logger.debug("Header line from " + file + ": " + line);
-						if (line.length() == 0) {
-							line = br.readLine();
+						if (line == null || line.startsWith("#")) {
 							break;
 						}
 						int index = line.indexOf("=");
 						String key = index >= 0 ? line.substring(0, index) : line;
 						String value = index >= 0 ? line.substring(index + 1) : null;
 						map.put(key, value);
-						line = br.readLine();
 					}
 					headers = map.isEmpty() ? null : new MessageHeaders(map);
 				}
 				StringBuilder sb = new StringBuilder();
-				int count = 0;
-				while (running.get() && count < 2 && line != null) {
+				boolean nested = false;
+				while (running.get() && line != null) {
 					logger.debug("Line from " + file + ": " + line);
-					if (line.length() == 0) {
-						count++;
-					}
-					else {
-						count = 0;
-					}
-					if (count == 0) {
-						sb.append(line + System.getProperty("line.separator"));
-					}
-					if (count<2) {
-						// If we finished reading a message don't go onto the next line
+					if (line.equals("#payload")) {
+						nested = true;
 						line = br.readLine();
+						continue;
+					}
+					if (line.equals("#end")) {
+						break;
+					}
+					sb.append(line);
+					if (nested) {
+						line = br.readLine();
+						if (line.equals("#end")) {
+							break;
+						}
+						sb.append(System.getProperty("line.separator"));
+					} else {
+						break;
 					}
 				}
-				if (count > 1 || !running.get()) {
-					if (line != null && line.length() > 0) {
-						// Partial message received
-						sb.append(line + System.getProperty("line.separator"));
-					}
+				if (sb.length() > 0 || headers!=null) {
 					MessageBuilder<String> builder = MessageBuilder
 							.withPayload(sb.toString());
 					if (headers != null) {
