@@ -148,51 +148,55 @@ public class MessageController implements Closeable {
 		}
 
 		private void write() throws IOException {
-			while (running.get()) {
-				Message<?> message = null;
-				try {
-					message = output.take();
-				}
-				catch (InterruptedException e) {
-					running.set(false);
-					Thread.currentThread().interrupt();
-				}
-				if (message != null) {
-					StringBuilder sb = new StringBuilder();
-					if (!message.getHeaders().isEmpty()) {
-						StringBuilder hb = new StringBuilder();
-						for (Entry<String, Object> entry : message.getHeaders()
-								.entrySet()) {
-							if (!"id".equals(entry.getKey())
-									&& !"timestamp".equals(entry.getKey())
-									&& entry.getValue() instanceof String) {
-								if (hb.length() == 0) {
-									hb.append("#headers\n");
+			FileOutputStream stream = new FileOutputStream(file, true);
+			try {
+				while (running.get()) {
+					Message<?> message = null;
+					try {
+						message = output.take();
+					}
+					catch (InterruptedException e) {
+						running.set(false);
+						Thread.currentThread().interrupt();
+					}
+					if (message != null) {
+						StringBuilder sb = new StringBuilder();
+						if (!message.getHeaders().isEmpty()) {
+							StringBuilder hb = new StringBuilder();
+							for (Entry<String, Object> entry : message.getHeaders()
+									.entrySet()) {
+								if (!"id".equals(entry.getKey())
+										&& !"timestamp".equals(entry.getKey())
+										&& entry.getValue() instanceof String) {
+									if (hb.length() == 0) {
+										hb.append("#headers\n");
+									}
+									hb.append(entry.getKey()).append("=")
+											.append(entry.getValue()).append("\n");
 								}
-								hb.append(entry.getKey()).append("=")
-										.append(entry.getValue()).append("\n");
+							}
+							if (hb.length() > 0) {
+								sb.append(hb);
 							}
 						}
-						if (hb.length() > 0) {
-							sb.append(hb);
+						String value = message.getPayload().toString();
+						boolean needsEnd = false;
+						if (value.contains("\n") || sb.length() > 0) {
+							sb.append("#payload\n");
+							needsEnd = true;
 						}
-					}
-					String value = message.getPayload().toString();
-					boolean needsEnd = false;
-					if (value.contains("\n") || sb.length()>0) {
-						sb.append("#payload\n");
-						needsEnd = true;
-					}
-					sb.append(value).append("\n");
-					if (needsEnd) {
-						sb.append("#end\n");
-					}
-					logger.debug("Sending to " + file + ": " + sb);
-					try (FileOutputStream stream = new FileOutputStream(file, true)) {
+						sb.append(value).append("\n");
+						if (needsEnd) {
+							sb.append("#end\n");
+						}
+						logger.debug("Sending to " + file + ": " + sb);
 						StreamUtils.copy(sb.toString(), StandardCharsets.UTF_8, stream);
 						stream.flush();
 					}
 				}
+			}
+			finally {
+				stream.close();
 			}
 		}
 
@@ -238,11 +242,12 @@ public class MessageController implements Closeable {
 							break;
 						}
 						sb.append(System.getProperty("line.separator"));
-					} else {
+					}
+					else {
 						break;
 					}
 				}
-				if (sb.length() > 0 || headers!=null) {
+				if (sb.length() > 0 || headers != null) {
 					MessageBuilder<String> builder = MessageBuilder
 							.withPayload(sb.toString());
 					if (headers != null) {
