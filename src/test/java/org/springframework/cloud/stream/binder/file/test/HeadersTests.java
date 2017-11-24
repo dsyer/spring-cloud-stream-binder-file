@@ -45,7 +45,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @RunWith(SpringRunner.class)
 @SpringBootTest({ "spring.cloud.stream.binder.file.prefix=target/streams",
-		"logging.level.root=INFO",
+		"spring.cloud.stream.bindings.output.destination=out",
+		"spring.cloud.stream.bindings.input.destination=in", "logging.level.root=INFO",
 		"logging.level.org.springframework.cloud.stream.binder.file=DEBUG",
 		"logging.level.org.springframework.integration=DEBUG" })
 @DirtiesContext
@@ -63,19 +64,25 @@ public class HeadersTests {
 	}
 
 	@Test
+	public void destinations() throws Exception {
+		assertThat(new File("target/streams/in")).exists();
+		assertThat(new File("target/streams/out")).exists();
+	}
+	
+	@Test
 	public void supplier() throws Exception {
 		processor.output().send(
 				MessageBuilder.withPayload("hello").setHeader("foo", "bar").build());
-		Message<?> message = controller.receive("output", 100, TimeUnit.MILLISECONDS);
+		Message<?> message = controller.receive("out", 100, TimeUnit.MILLISECONDS);
 		assertThat((String) message.getPayload()).contains("hello");
 		assertThat(message.getHeaders()).containsEntry("foo", "bar");
 	}
 
 	@Test
 	public void function() throws Exception {
-		controller.send("input",
+		controller.send("in",
 				MessageBuilder.withPayload("hello").setHeader("foo", "bar").build());
-		Message<?> message = controller.receive("output", 100, TimeUnit.MILLISECONDS);
+		Message<?> message = controller.receive("out", 100, TimeUnit.MILLISECONDS);
 		assertThat((String) message.getPayload()).contains("HELLO");
 		assertThat(message.getHeaders()).containsEntry("foo", "bar");
 	}
