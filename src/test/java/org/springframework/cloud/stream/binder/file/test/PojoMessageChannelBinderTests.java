@@ -66,17 +66,17 @@ public class PojoMessageChannelBinderTests {
 	@Test
 	public void supplier() throws Exception {
 		processor.output().send(MessageBuilder.withPayload(new Foo("hello")).build());
-		String message = (String) controller.receive("output", 100, TimeUnit.MILLISECONDS)
+		String message = (String) controller.receive("output", 1000, TimeUnit.MILLISECONDS)
 				.getPayload();
 		assertThat(message).contains("\"hello\"");
 	}
 
 	@Test
 	public void function() throws Exception {
-		controller.send("input", MessageBuilder.withPayload("{\"value\":\"hello\"}").build());
-		String message = (String) controller.receive("output", 100, TimeUnit.MILLISECONDS)
+		controller.send("input", MessageBuilder.withPayload("{\"value\":\"world\"}").build());
+		String message = (String) controller.receive("output", 1000, TimeUnit.MILLISECONDS)
 				.getPayload();
-		assertThat(message).contains("\"HELLO\"");
+		assertThat(message).contains("\"WORLD\"");
 	}
 
 	@SpringBootApplication

@@ -268,6 +268,18 @@ public class MessageController implements Closeable {
 						}
 					}
 				}
+				if (line == null) {
+					// Reached end of file. So it's not a fifo, or the producer closed it,
+					// and we should sleep to prevent a busy wait. TODO: should we also
+					// empty the file, if it is a file?
+					try {
+						Thread.sleep(20L);
+					}
+					catch (InterruptedException e) {
+						running.set(false);
+						Thread.currentThread().interrupt();
+					}
+				}
 			}
 			br.close();
 		}
