@@ -16,21 +16,39 @@
 
 package org.springframework.cloud.stream.binder.file.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfigureBefore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.WebMvcAutoConfiguration;
 import org.springframework.cloud.stream.binder.Binder;
+import org.springframework.cloud.stream.binder.file.FileMessageChannelBinder;
+import org.springframework.cloud.stream.binder.file.MessageController;
+import org.springframework.cloud.stream.config.codec.kryo.KryoCodecAutoConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.PropertySource;
+import org.springframework.integration.codec.Codec;
 
 /**
  * @author Dave Syer
  */
 @Configuration
 @ConditionalOnMissingBean(Binder.class)
-@Import(FileMessageChannelBinderConfiguration.class)
-@PropertySource("classpath:/META-INF/spring-cloud-stream/file-binder.properties")
 @AutoConfigureBefore({ WebMvcAutoConfiguration.class })
+@Import({ PropertyPlaceholderAutoConfiguration.class, KryoCodecAutoConfiguration.class })
 public class FileServiceAutoConfiguration {
+
+	@Autowired
+	private Codec codec;
+
+	@Bean
+	public FileMessageChannelBinder fileMessageChannelBinder(
+			MessageController controller) {
+		FileMessageChannelBinder messageChannelBinder = new FileMessageChannelBinder(
+				controller);
+		messageChannelBinder.setCodec(this.codec);
+		return messageChannelBinder;
+	}
+
 }
