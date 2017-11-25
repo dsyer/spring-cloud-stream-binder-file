@@ -56,7 +56,9 @@ public class MessageController implements Closeable {
 
 	private final AtomicBoolean running = new AtomicBoolean(false);
 
-	private final Map<String, FileAdapter> queues = new HashMap<>();
+	private final Map<String, FileAdapter> inputs = new HashMap<>();
+
+	private final Map<String, FileAdapter> outputs = new HashMap<>();
 
 	private ExecutorService executor = Executors.newCachedThreadPool();
 
@@ -73,13 +75,13 @@ public class MessageController implements Closeable {
 
 	public void bind(String name, String group, MessageChannel inputTarget) {
 		running.set(true);
-		queues.computeIfAbsent(name, key -> new FileAdapter(key)).target = inputTarget;
+		inputs.computeIfAbsent(name, key -> new FileAdapter(key)).target = inputTarget;
 	}
 
 	public Message<?> receive(String name, long timeout, TimeUnit unit) {
 		running.set(true);
 		try {
-			return queues.computeIfAbsent(name, key -> new FileAdapter(key)).input
+			return inputs.computeIfAbsent(name, key -> new FileAdapter(key)).exchange
 					.poll(timeout, unit);
 		}
 		catch (InterruptedException e) {
@@ -98,7 +100,8 @@ public class MessageController implements Closeable {
 	public void send(String name, Message<?> message) {
 		running.set(true);
 		try {
-			queues.computeIfAbsent(name, key -> new FileAdapter(key)).output.put(message);
+			outputs.computeIfAbsent(name, key -> new FileAdapter(key, true)).exchange
+					.put(message);
 		}
 		catch (InterruptedException e) {
 			running.set(false);
@@ -108,16 +111,14 @@ public class MessageController implements Closeable {
 
 	class FileAdapter {
 		private File file;
-		private final SynchronousQueue<Message<?>> input = new SynchronousQueue<>();
-		private final SynchronousQueue<Message<?>> output = new SynchronousQueue<>();
+		private final SynchronousQueue<Message<?>> exchange = new SynchronousQueue<>();
 		private MessageChannel target;
 
 		public FileAdapter(String name) {
-			this(name, null);
+			this(name, false);
 		}
 
-		public FileAdapter(String name, MessageChannel target) {
-			this.target = target;
+		public FileAdapter(String name, boolean writable) {
 			this.file = new File(prefix + "/" + name);
 			if (!this.file.exists()) {
 				logger.debug("Creating: " + file);
@@ -128,37 +129,46 @@ public class MessageController implements Closeable {
 					logger.error("Cannot create new file", e);
 				}
 			}
-			logger.debug("Starting background processing for: " + file);
-			executor.submit(() -> {
-				try {
-					listen();
-				}
-				catch (IOException e) {
-					logger.error("Failed to read: " + file, e);
-				}
-			});
-			executor.submit(() -> {
-				try {
-					write();
-				}
-				catch (IOException e) {
-					logger.error("Failed to write: " + file, e);
-				}
-			});
+			logger.debug("Starting background processing for: " + file + ", writable="
+					+ writable);
+			if (!writable) {
+				executor.submit(() -> {
+					try {
+						listen();
+					}
+					catch (IOException e) {
+						logger.error("Failed to read: " + file, e);
+					}
+				});
+			}
+			else {
+				executor.submit(() -> {
+					try {
+						write();
+					}
+					catch (IOException e) {
+						logger.error("Failed to write: " + file, e);
+					}
+				});
+			}
 		}
 
 		private void write() throws IOException {
-			FileOutputStream stream = new FileOutputStream(file, true);
+			FileOutputStream stream = null;
 			try {
 				while (running.get()) {
 					Message<?> message = null;
 					try {
-						message = output.take();
+						message = exchange.take();
 					}
 					catch (InterruptedException e) {
 						running.set(false);
 						Thread.currentThread().interrupt();
 					}
+					if (stream == null) {
+						stream = new FileOutputStream(file, true);
+					}
+					logger.debug("Serializing to " + file + ": " + message);
 					if (message != null) {
 						StringBuilder sb = new StringBuilder();
 						if (!message.getHeaders().isEmpty()) {
@@ -196,7 +206,9 @@ public class MessageController implements Closeable {
 				}
 			}
 			finally {
-				stream.close();
+				if (stream != null) {
+					stream.close();
+				}
 			}
 		}
 
@@ -254,13 +266,13 @@ public class MessageController implements Closeable {
 						builder.copyHeadersIfAbsent(headers);
 					}
 					Message<String> message = builder.build();
-					logger.debug("Assembed from " + file + ": " + message);
+					logger.debug("Assembled from " + file + ": " + message);
 					if (this.target != null) {
 						target.send(message);
 					}
 					else {
 						try {
-							input.put(message);
+							exchange.put(message);
 						}
 						catch (InterruptedException e) {
 							running.set(false);
