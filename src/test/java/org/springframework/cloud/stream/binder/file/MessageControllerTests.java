@@ -50,10 +50,12 @@ public class MessageControllerTests {
 	private File root;
 
 	@Before
-	public void init() {
+	public void init() throws IOException {
 		root = new File("target/test");
 		FileSystemUtils.deleteRecursively(root);
 		root.mkdirs();
+		new File(root, "input").createNewFile();
+		new File(root, "output").createNewFile();
 	}
 
 	@After
@@ -115,7 +117,8 @@ public class MessageControllerTests {
 		controller.send("output",
 				MessageBuilder.withPayload("world").setHeader("foo", "baz").build());
 		String result = getOutput("output", "world");
-		assertThat(result).isEqualTo("#headers\nfoo=bar\n#payload\nhello\n#end\n#headers\nfoo=baz\n#payload\nworld\n#end\n");
+		assertThat(result).isEqualTo(
+				"#headers\nfoo=bar\n#payload\nhello\n#end\n#headers\nfoo=baz\n#payload\nworld\n#end\n");
 	}
 
 	@Test
@@ -161,10 +164,11 @@ public class MessageControllerTests {
 		StreamUtils.copy(value, Charset.forName("UTF-8"),
 				new FileOutputStream(new File(root, filename)));
 	}
-	
+
 	private String getOutput(String output) throws Exception {
 		return getOutput(output, null);
 	}
+
 	private String getOutput(String output, String pattern) throws Exception {
 		File file = new File(root, output);
 		String result = null;
@@ -173,7 +177,7 @@ public class MessageControllerTests {
 			result = StreamUtils.copyToString(new FileInputStream(file),
 					Charset.defaultCharset());
 			Thread.sleep(20L);
-			if (pattern!=null && !result.contains(pattern)) {
+			if (pattern != null && !result.contains(pattern)) {
 				result = null;
 			}
 		}

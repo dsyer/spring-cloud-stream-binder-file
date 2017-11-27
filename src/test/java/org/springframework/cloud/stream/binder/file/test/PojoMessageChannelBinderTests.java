@@ -60,22 +60,27 @@ public class PojoMessageChannelBinderTests {
 
 	@BeforeClass
 	public static void init() throws Exception {
-		FileSystemUtils.deleteRecursively(new File("target/streams"));
+		File root = new File("target/streams");
+		FileSystemUtils.deleteRecursively(root);
+		root.mkdirs();
+		new File(root, "input").createNewFile();
+		new File(root, "output").createNewFile();
 	}
 
 	@Test
 	public void supplier() throws Exception {
 		processor.output().send(MessageBuilder.withPayload(new Foo("hello")).build());
-		String message = (String) controller.receive("output", 1000, TimeUnit.MILLISECONDS)
-				.getPayload();
+		String message = (String) controller
+				.receive("output", 1000, TimeUnit.MILLISECONDS).getPayload();
 		assertThat(message).contains("\"hello\"");
 	}
 
 	@Test
 	public void function() throws Exception {
-		controller.send("input", MessageBuilder.withPayload("{\"value\":\"world\"}").build());
-		String message = (String) controller.receive("output", 1000, TimeUnit.MILLISECONDS)
-				.getPayload();
+		controller.send("input",
+				MessageBuilder.withPayload("{\"value\":\"world\"}").build());
+		String message = (String) controller
+				.receive("output", 1000, TimeUnit.MILLISECONDS).getPayload();
 		assertThat(message).contains("\"WORLD\"");
 	}
 

@@ -60,7 +60,11 @@ public class HeadersTests {
 
 	@BeforeClass
 	public static void init() throws Exception {
-		FileSystemUtils.deleteRecursively(new File("target/streams"));
+		File root = new File("target/streams");
+		FileSystemUtils.deleteRecursively(root);
+		root.mkdirs();
+		new File(root, "in").createNewFile();
+		new File(root, "out").createNewFile();
 	}
 
 	@Test
@@ -68,7 +72,7 @@ public class HeadersTests {
 		assertThat(new File("target/streams/in")).exists();
 		assertThat(new File("target/streams/out")).exists();
 	}
-	
+
 	@Test
 	public void supplier() throws Exception {
 		processor.output().send(

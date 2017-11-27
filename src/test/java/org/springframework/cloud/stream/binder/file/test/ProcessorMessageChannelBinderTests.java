@@ -59,7 +59,11 @@ public abstract class ProcessorMessageChannelBinderTests {
 
 		@BeforeClass
 		public static void init() throws Exception {
-			FileSystemUtils.deleteRecursively(new File("target/streams"));
+			File root = new File("target/streams");
+			FileSystemUtils.deleteRecursively(root);
+			root.mkdirs();
+			new File(root, "input").createNewFile();
+			new File(root, "output").createNewFile();
 		}
 
 	}

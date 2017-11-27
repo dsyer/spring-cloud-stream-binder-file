@@ -120,13 +120,17 @@ public class MessageController implements Closeable {
 
 		public FileAdapter(String name, boolean writable) {
 			this.file = new File(prefix + "/" + name);
-			if (!this.file.exists()) {
-				logger.debug("Creating: " + file);
-				try {
-					this.file.createNewFile();
+			int counter = 0;
+			while (!this.file.exists() && counter++ < 100) {
+				if (logger.isDebugEnabled() && counter % 10 == 1) {
+					logger.debug("Waiting for: " + file);
 				}
-				catch (IOException e) {
-					logger.error("Cannot create new file", e);
+				try {
+					Thread.sleep(100L);
+				}
+				catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException("Cannot find file: " + file, e);
 				}
 			}
 			logger.debug("Starting background processing for: " + file + ", writable="
