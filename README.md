@@ -1,4 +1,4 @@
-A Spring Cloud Stream binder for a plain test files. Can be used to send and receive messages over named pipes.
+A Spring Cloud Stream binder for a plain files. Can be used to send and receive messages over named pipes.
 
 ## Usage
 
