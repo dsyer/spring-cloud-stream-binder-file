@@ -75,6 +75,20 @@ public abstract class ProcessorMessageChannelBinderTests {
 		public static void init() throws Exception {
 			File input = new File("target/stream/input");
 			File output = new File("target/stream/output");
+			try {
+				File root = new File("target/stream");
+				FileSystemUtils.deleteRecursively(root);
+				root.mkdirs();
+				Runtime.getRuntime()
+						.exec(new String[] { "mkfifo", input.getAbsolutePath() });
+				Runtime.getRuntime()
+						.exec(new String[] { "mkfifo", output.getAbsolutePath() });
+			}
+			catch (Exception e) {
+				Assume.assumeFalse("Skipping tests because pipes could not be created",
+						true);
+			}
+			Thread.sleep(200L);
 			Assume.assumeTrue(
 					"Skipping tests because files do not exist. To run this test create named pipes at "
 							+ input + " and " + output,
