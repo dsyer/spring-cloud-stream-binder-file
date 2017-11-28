@@ -159,124 +159,146 @@ public class MessageController implements Closeable {
 
 		private void write() throws IOException {
 			FileOutputStream stream = null;
-			try {
-				while (running.get()) {
-					Message<?> message = null;
-					try {
-						message = exchange.take();
-					}
-					catch (InterruptedException e) {
-						running.set(false);
-						Thread.currentThread().interrupt();
-					}
-					if (stream == null) {
-						stream = new FileOutputStream(file, true);
-					}
-					logger.debug("Serializing to " + file + ": " + message);
-					if (message != null) {
-						StringBuilder sb = new StringBuilder();
-						if (!message.getHeaders().isEmpty()) {
-							StringBuilder hb = new StringBuilder();
-							for (Entry<String, Object> entry : message.getHeaders()
-									.entrySet()) {
-								if (!"id".equals(entry.getKey())
-										&& !"timestamp".equals(entry.getKey())
-										&& entry.getValue() instanceof String) {
-									if (hb.length() == 0) {
-										hb.append("#headers\n");
+			while (running.get()) {
+				try {
+					while (running.get()) {
+						Message<?> message = null;
+						try {
+							message = exchange.take();
+						}
+						catch (InterruptedException e) {
+							running.set(false);
+							Thread.currentThread().interrupt();
+						}
+						if (stream == null) {
+							stream = new FileOutputStream(file, true);
+						}
+						logger.debug("Serializing to " + file + ": " + message);
+						if (message != null) {
+							StringBuilder sb = new StringBuilder();
+							if (!message.getHeaders().isEmpty()) {
+								StringBuilder hb = new StringBuilder();
+								for (Entry<String, Object> entry : message.getHeaders()
+										.entrySet()) {
+									if (!"id".equals(entry.getKey())
+											&& !"timestamp".equals(entry.getKey())
+											&& entry.getValue() instanceof String) {
+										if (hb.length() == 0) {
+											hb.append("#headers\n");
+										}
+										hb.append(entry.getKey()).append("=")
+												.append(entry.getValue()).append("\n");
 									}
-									hb.append(entry.getKey()).append("=")
-											.append(entry.getValue()).append("\n");
+								}
+								if (hb.length() > 0) {
+									sb.append(hb);
 								}
 							}
-							if (hb.length() > 0) {
-								sb.append(hb);
+							String value = message.getPayload().toString();
+							boolean needsEnd = false;
+							if (value.contains("\n") || sb.length() > 0) {
+								sb.append("#payload\n");
+								needsEnd = true;
 							}
+							sb.append(value).append("\n");
+							if (needsEnd) {
+								sb.append("#end\n");
+							}
+							logger.debug("Sending to " + file + ": " + sb);
+							StreamUtils.copy(sb.toString(), StandardCharsets.UTF_8,
+									stream);
+							stream.flush();
 						}
-						String value = message.getPayload().toString();
-						boolean needsEnd = false;
-						if (value.contains("\n") || sb.length() > 0) {
-							sb.append("#payload\n");
-							needsEnd = true;
-						}
-						sb.append(value).append("\n");
-						if (needsEnd) {
-							sb.append("#end\n");
-						}
-						logger.debug("Sending to " + file + ": " + sb);
-						StreamUtils.copy(sb.toString(), StandardCharsets.UTF_8, stream);
-						stream.flush();
 					}
 				}
-			}
-			finally {
+				catch (Exception e) {
+				}
 				if (stream != null) {
-					stream.close();
+					try {
+						stream.close();
+					}
+					catch (Exception e) {
+						logger.error("Failed to close: " + file, e);
+					}
 				}
 			}
 		}
 
 		private void listen() throws IOException {
-			FileInputStream inputStream = new FileInputStream(file);
-			BufferedReader br = null;
-			br = new BufferedReader(new InputStreamReader(inputStream));
-			logger.debug("Receiving from " + file);
 			while (running.get()) {
-				String line = br.readLine();
-				MessageHeaders headers = null;
-				if (line != null && line.equals("#headers")) {
-					Map<String, Object> map = new LinkedHashMap<>();
-					while (running.get() && line != null) {
-						line = br.readLine();
-						logger.debug("Header line from " + file + ": " + line);
-						if (line == null || line.startsWith("#")) {
-							break;
+				FileInputStream inputStream = new FileInputStream(file);
+				BufferedReader br = null;
+				br = new BufferedReader(new InputStreamReader(inputStream));
+				logger.debug("Receiving from " + file);
+				while (running.get()) {
+					String line = br.readLine();
+					MessageHeaders headers = null;
+					if (line != null && line.equals("#headers")) {
+						Map<String, Object> map = new LinkedHashMap<>();
+						while (running.get() && line != null) {
+							line = br.readLine();
+							logger.debug("Header line from " + file + ": " + line);
+							if (line == null || line.startsWith("#")) {
+								break;
+							}
+							int index = line.indexOf("=");
+							String key = index >= 0 ? line.substring(0, index) : line;
+							String value = index >= 0 ? line.substring(index + 1) : null;
+							map.put(key, value);
 						}
-						int index = line.indexOf("=");
-						String key = index >= 0 ? line.substring(0, index) : line;
-						String value = index >= 0 ? line.substring(index + 1) : null;
-						map.put(key, value);
+						headers = map.isEmpty() ? null : new MessageHeaders(map);
 					}
-					headers = map.isEmpty() ? null : new MessageHeaders(map);
-				}
-				StringBuilder sb = new StringBuilder();
-				boolean nested = false;
-				while (running.get() && line != null) {
-					logger.debug("Line from " + file + ": " + line);
-					if (line.equals("#payload")) {
-						nested = true;
-						line = br.readLine();
-						continue;
-					}
-					if (line.equals("#end")) {
-						break;
-					}
-					sb.append(line);
-					if (nested) {
-						line = br.readLine();
+					StringBuilder sb = new StringBuilder();
+					boolean nested = false;
+					while (running.get() && line != null) {
+						logger.debug("Line from " + file + ": " + line);
+						if (line.equals("#payload")) {
+							nested = true;
+							line = br.readLine();
+							continue;
+						}
 						if (line.equals("#end")) {
 							break;
 						}
-						sb.append(System.getProperty("line.separator"));
+						sb.append(line);
+						if (nested) {
+							line = br.readLine();
+							if (line.equals("#end")) {
+								break;
+							}
+							sb.append(System.getProperty("line.separator"));
+						}
+						else {
+							break;
+						}
 					}
-					else {
-						break;
+					if (sb.length() > 0 || headers != null) {
+						MessageBuilder<String> builder = MessageBuilder
+								.withPayload(sb.toString());
+						if (headers != null) {
+							builder.copyHeadersIfAbsent(headers);
+						}
+						Message<String> message = builder.build();
+						logger.debug("Assembled from " + file + ": " + message);
+						if (this.target != null) {
+							target.send(message);
+						}
+						else {
+							try {
+								exchange.put(message);
+							}
+							catch (InterruptedException e) {
+								running.set(false);
+								Thread.currentThread().interrupt();
+							}
+						}
 					}
-				}
-				if (sb.length() > 0 || headers != null) {
-					MessageBuilder<String> builder = MessageBuilder
-							.withPayload(sb.toString());
-					if (headers != null) {
-						builder.copyHeadersIfAbsent(headers);
-					}
-					Message<String> message = builder.build();
-					logger.debug("Assembled from " + file + ": " + message);
-					if (this.target != null) {
-						target.send(message);
-					}
-					else {
+					if (line == null) {
+						// Reached end of file. So it's not a fifo, or the producer closed
+						// it, and we should sleep to prevent a busy wait. TODO: should we
+						// also empty the file, if it is a file?
 						try {
-							exchange.put(message);
+							Thread.sleep(20L);
 						}
 						catch (InterruptedException e) {
 							running.set(false);
@@ -284,20 +306,16 @@ public class MessageController implements Closeable {
 						}
 					}
 				}
-				if (line == null) {
-					// Reached end of file. So it's not a fifo, or the producer closed it,
-					// and we should sleep to prevent a busy wait. TODO: should we also
-					// empty the file, if it is a file?
+				if (br != null) {
 					try {
-						Thread.sleep(20L);
+						br.close();
 					}
-					catch (InterruptedException e) {
-						running.set(false);
-						Thread.currentThread().interrupt();
+					catch (Exception e) {
+						logger.error("Failed to close: " + file, e);
 					}
+
 				}
 			}
-			br.close();
 		}
 
 	}
