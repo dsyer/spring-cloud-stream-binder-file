@@ -62,6 +62,8 @@ public class MessageController implements Closeable {
 
 	private ExecutorService executor = Executors.newCachedThreadPool();
 
+	private long timeoutMillis;
+
 	public MessageController(String prefix) {
 		this.prefix = prefix;
 		new File(prefix).mkdirs();
@@ -121,9 +123,9 @@ public class MessageController implements Closeable {
 		public FileAdapter(String name, boolean writable) {
 			this.file = new File(prefix + "/" + name);
 			int counter = 0;
-			while (!this.file.exists() && counter++ < 100) {
-				if (logger.isDebugEnabled() && counter % 10 == 1) {
-					logger.debug("Waiting for: " + file);
+			while (!this.file.exists() && counter++ < timeoutMillis/100) {
+				if (logger.isInfoEnabled() && counter == 1) {
+					logger.info("Waiting for: " + file);
 				}
 				try {
 					Thread.sleep(100L);
@@ -132,6 +134,9 @@ public class MessageController implements Closeable {
 					Thread.currentThread().interrupt();
 					throw new IllegalStateException("Cannot find file: " + file, e);
 				}
+			}
+			if (!file.exists() && timeoutMillis>0) {
+				throw new IllegalStateException("Timed out waiting for: " + file);
 			}
 			logger.debug("Starting background processing for: " + file + ", writable="
 					+ writable);
@@ -318,5 +323,9 @@ public class MessageController implements Closeable {
 			}
 		}
 
+	}
+
+	public void setTimeout(long timeoutMillis) {
+		this.timeoutMillis = timeoutMillis;
 	}
 }

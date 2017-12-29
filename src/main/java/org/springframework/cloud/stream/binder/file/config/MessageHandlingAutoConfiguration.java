@@ -33,6 +33,19 @@ public class MessageHandlingAutoConfiguration {
 	 */
 	private String prefix = "target/stream";
 
+	/**
+	 * Maximum time to wait on start up for files to exist.
+	 */
+	private long timeoutMillis = 10000;
+
+	public long getTimeoutMillis() {
+		return this.timeoutMillis;
+	}
+
+	public void setTimeoutMillis(long timeoutMillis) {
+		this.timeoutMillis = timeoutMillis;
+	}
+
 	public String getPrefix() {
 		return prefix;
 	}
@@ -44,6 +57,7 @@ public class MessageHandlingAutoConfiguration {
 	@Bean
 	public MessageController messageController() {
 		MessageController controller = new MessageController(prefix);
+		controller.setTimeout(timeoutMillis);
 		return controller;
 	}
 }
